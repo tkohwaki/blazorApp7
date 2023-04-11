@@ -1,0 +1,19 @@
+﻿@inherits LayoutComponentBase
+
+<PageTitle>blazorApp7</PageTitle>
+
+<div class="page">
+
+    <main>
+        <div class="top-row px-4" style="display:flex;justify-content:center;">
+            <h1 class="white-text">Blazor Server Side App Sample</h1>
+        </div>
+        <div style="text-align:right;padding-right:1em;font-size:xx-small"><!-- Coded by T.Ohwaki<br/> -->
+        <span>dotnet version=</span><span>@System.Environment.Version.ToString()</span>
+        </div>
+
+        <article class="content px-4">
+            @Body
+        </article>
+    </main>
+</div>

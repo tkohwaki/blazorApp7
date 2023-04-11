@@ -1,0 +1,37 @@
+@page
+@addTagHelper *,Microsoft.AspNetCore.Mvc.TagHelpers
+@using blazorApp7.Pages
+@using blazorApp7.Data
+@inject WeatherForecastService Weather
+
+<html>
+    <head>
+        <title>Razorコンポーネントテスト</title>
+        <link rel="stylesheet" href="css/bootstrap/bootstrap.min.css" />
+        <link rel="stylesheet" href="~/css/site.css" />
+        <script type="text/javascript" src="~/scripts/project.js"></script>
+    </head>
+    <body>
+        <div class="areabody">
+        <h3>CSHTMLからBlazorコンポーネントは使えるのか?</h3><br/>
+            <div class="component-area">
+                <component type="typeof(Counter)" render-mode="ServerPrerendered"/>
+            </div>
+        </div>
+        <br/>
+        <hr/>
+        <div class="areabody">
+            結論から言うと、Blazor用のJavaScriptおよびその他コンポーネント実行に必要なJavascriptとCSSを読み込めば大丈夫な模様。<br/>
+            BlazorServerの場合は"_framework/blazor.server.js"<br/>
+            <script src="_framework/blazor.server.js"></script>
+        </div>
+        @{
+            var lst = await Weather.GetForecastAsync(new DateOnly());
+        }
+        @foreach(var itm in lst) {
+            <span>@itm.Date</span><span>&nbsp;</span>
+            <span>@itm.TemperatureC</span><span>&nbsp;</span>
+            <span>@itm.Summary</span><br/>
+        }
+    </body>
+</html>

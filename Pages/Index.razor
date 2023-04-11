@@ -1,0 +1,153 @@
+@page "/"
+@using System.Text.RegularExpressions
+
+<h1 style="@titleStyle">グラデーション</h1>
+<p style="font-size:small">
+このページはASP.NET Core 3.1 Blazor Server Sideを使用して作成されています。<br/>
+&lt;input/&gt;等のイベントハンドラのコードはJavascriptではなく、全てC#で記述します。(C#からJavascript呼出しも可)<br/>
+イベント発生時はビルトインのJavascriptがSingalRを用いてサーバーに通知,<br/>
+サーバーでの処理後、SignalRを用いてブラウザに結果が通知されます。<br/>
+ブラウザ側のJavascript(blazorのビルトイン)が結果を元にDOMの変更部分のみを再描画します。<br/>
+例えば、上の&lt;h1&gt;タグはソース上では以下のように定義されており、実際にはその下のように変換されます。<br/>
+(@@titleStyleはtitleStyleというC#の変数値に置き換えられる)
+<pre>
+	&lt;h1 style="@@titleStyle"&gt;グラデーション&lt;/h1&gt;
+	&dArr;
+	&lt;h1 style="@((MarkupString)Regex.Replace(titleStyle!,@"([#][a-f,0-9]{6})","<span style='color:red;font-weight:bold'>$1</span>"))"&gt;グラデーション&lt;/h1&gt;
+</pre>
+<br/>
+<a href="ShowCode?FileName=Index.razor&Return=">ソース</a>
+</p>
+
+<br/>
+<span style="font-weight:bold">Linear Gradient</span>
+<div style="@BgStyle">
+    <div style="display:table-cell;vertical-align:middle;text-align:center">
+        Gradation:&nbsp;
+        <!-- カラーピッカーのイベントは指定変数へ値を設定し、スタイル文字列の変更を行う -->
+        <input type="color" oninput="@((Action<ChangeEventArgs>)(e=>setGradationToS(e,out fromColor)))" value="@fromColor"/>
+        &nbsp;～&nbsp;
+        <input type="color" oninput="@((Action<ChangeEventArgs>)(e=>setGradationToS(e,out toColor)))" value="@toColor"/><br/>
+        &uArr;<br/>
+        カラーピッカーからも色を変更できます。
+    </div>
+</div>
+<br/>
+角度：<input type="range" min="0" max="359" value="@Degree" onchange="@((Action<ChangeEventArgs>)((e)=>setGradationToI(e,out Degree)))"/>&nbsp;<span>@Degree</span>Deg.
+<br/>
+<br/>
+<span style="font-weight:bold">Radial Gradient</span>
+<div style="@circleStyle">
+</div>
+開始位置(X)<input type="range" min="0" max="100" value="@startX"
+    onchange="@((Action<ChangeEventArgs>)(e=>setGradationToI(e,out startX)))" />&nbsp;<span>@startX</span>px<br/>
+開始位置(Y)<input type="range" min="0" max="100" value="@startY"
+     onchange="@((Action<ChangeEventArgs>)(e=>setGradationToI(e, out startY)))" />&nbsp;<span>@startY</span>px<br/>
+開始色開始位置:<input type="range" min="5" max="80" value="@fColorStart"
+    onchange="@((Action<ChangeEventArgs>)(e=>setGradationToI(e, out fColorStart)))"/>&nbsp;<span>@fColorStart</span>px<br/>
+終了色開始位置:<input type="range" min="@fColorStart" max="80" value="@tColorStart"
+    onchange="@((Action<ChangeEventArgs>)(e=>setGradationToI(e, out tColorStart)))"/>&nbsp;<span>@tColorStart</span>px&nbsp;&nbsp;
+<button class="btn btn-primary" @onclick="btnResetClick">リセット</button>
+<br/>
+<button class="btn btn-primary" @onclick="btnGradationClick">Change Color</button>&nbsp;&lArr;ランダムに色と角度を生成します
+
+
+@code {　// ここにC#コードを記述
+    // インスタンス変数
+    private string? BgStyle;     // DIVのバックグラウンドスタイル
+    private string? fromColor;   // グラデーション開始色
+    private string? toColor;     // グラデーション終了色
+    private int Degree;         // グラデーション角度
+    private string? titleStyle;  // H1のスタイル
+    private string? circleStyle; // ラディアルグラデーションスタイル
+    private int startX;         // ラディアルグラデーション開始位置X
+    private int startY;         // ラディアルグラデーション開始位置Y
+    private int fColorStart;    // ラディアルグラデーション開始色開始ピクセル
+    private int tColorStart;    // ラディアルグラデーション終了色開始ピクセル
+
+    // DIVバックグラウンドスタイルのベース
+    const string BGSTYLEBASE = @"display:table;border-style:solid;border-color:black;
+        border-width:1px;width:350px;height:200px;border-radius:10px;
+        box-shadow: 2px 2px 4px gray;
+        background: linear-gradient({2}deg, {0}, {1})";
+
+    // DIV(Circle)バックグラウンドスタイルのベース
+    const string CIRCLESTYLEBASE = @"width:100px;height:100px;border-radius:50px;
+        background:radial-gradient(circle farthest-corner at {2}px {3}px,#ffffff,{0} {4}px,{1} {5}px)";
+    // H1スタイルのベース
+    const string titleStyleBase = @"font-weight:bold;
+        background: linear-gradient({0},{1});
+        -webkit-text-fill-color: transparent;-webkit-background-clip: text;";
+    //
+    //  初期化終了時イベントハンドラ
+    //
+    protected override void OnInitialized() {
+        fromColor = "#808080";
+        toColor = "#c0c0c0";
+        Degree = 180;
+        setInitialValuese();
+        setGradation();
+    }
+    //
+    //  ボタンクリック時イベントハンドラ
+    //
+    protected void btnGradationClick() {
+
+        // ランダムに開始色と終了色，角度を生成する
+        Random rnd = new Random();
+
+        int r = rnd.Next(256);
+        int g = rnd.Next(256);
+        int b = rnd.Next(256);
+
+        fromColor = $"#{r.ToString("x2")}{g.ToString("x2")}{b.ToString("x2")}";
+
+        r = rnd.Next(256);
+        g = rnd.Next(256);
+        b = rnd.Next(256);
+
+        toColor = $"#{r.ToString("x2")}{g.ToString("x2")}{b.ToString("x2")}";
+
+        Degree = rnd.Next(180);
+
+        // スタイル文字列を変更する
+        setGradation();
+    }
+    private void setGradation() {
+        // スタイル文字列を変更
+        BgStyle = string.Format(BGSTYLEBASE,fromColor,toColor,Degree);
+        titleStyle = string.Format(titleStyleBase,fromColor,toColor);
+        circleStyle = string.Format(CIRCLESTYLEBASE,fromColor,toColor,startX,startY,fColorStart,tColorStart);
+    }
+    //
+    //  文字列値代入とグラデーション文字列の作成
+    //
+    private void setGradationToS(ChangeEventArgs e, out string variable) {
+        variable = e.Value?.ToString()!;
+        setGradation();
+    }
+    //
+    //  数値の代入とグラデーション文字列の作成
+    //
+    private void setGradationToI(ChangeEventArgs e, out int variable) {
+        variable = Convert.ToInt32(e.Value);
+        setGradation();
+    }
+    //
+    //  リセットボタンクリック時処理
+    //
+    private void btnResetClick() {
+        setInitialValuese();
+        setGradation();
+    }
+    //
+    //  ラディアルグラデーションのパラメータ初期化
+    //
+    private void setInitialValuese() {
+        fColorStart = 10;
+        tColorStart = 70;
+        startX = 40;
+        startY = 30;
+    }
+
+}

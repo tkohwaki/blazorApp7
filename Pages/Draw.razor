@@ -1,0 +1,62 @@
+@page "/draw"
+@inject IJSRuntime JSRun
+@implements IDisposable
+<div style="display:flex;justify-content:center;align-items:center;">
+<div style="width:660px;height:500px;border-style:solid;border-width:1px;boder-color:darkgreen;display:flex;justify-content:center;align-items:center;">
+    <canvas @ref="Canvas" width="640" height="480">
+
+    </canvas>
+</div>
+</div>
+@code {
+    protected ElementReference Canvas;
+    private Timer? tm;
+
+    protected override void OnAfterRender(bool first) {
+        if (first) {
+            tm = new Timer(
+                async (obj) => {
+                    await InvokeAsync(DrawItem);
+                },null,0,10
+            );
+        }
+    }
+    private async Task DrawItem() {
+        CanvasRect clirect = await JSRun.InvokeAsync<CanvasRect>("GetElementRect",Canvas);
+        Random rnd = new Random();
+        int r = rnd.Next(256);
+        int g = rnd.Next(256);
+        int b = rnd.Next(256);
+        int x = rnd.Next((int)clirect.right);
+        int y = rnd.Next((int)clirect.bottom);
+        string c = $"#{r.ToString("x2")}{g.ToString("x2")}{b.ToString("x2")}";
+
+        int kind = rnd.Next(3);
+        if (kind == 0) {
+            int w = rnd.Next(100);
+            int h = rnd.Next(100);
+            await JSRun.InvokeVoidAsync("FillRect",Canvas,x,y,w,h,c);
+        } else if (kind == 1) {
+            int rr = rnd.Next(100);
+            await JSRun.InvokeVoidAsync("FillEllipse",Canvas,x,y,rr,c);
+        } else {
+            int l = rnd.Next(100);
+            await JSRun.InvokeVoidAsync("FillTraiangle",Canvas,x,y,l,c);
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+    public void Dispose() {
+        tm?.Change(0,0);
+        tm?.Dispose();
+    }
+    public class CanvasRect {
+        public double x { get; set; }
+        public double y { get; set; }
+        public double width { get; set; }
+        public double height { get; set; }
+        public double top { get; set; }
+        public double right { get; set; }
+        public double bottom { get; set; }
+        public double left { get; set; }
+    }
+}

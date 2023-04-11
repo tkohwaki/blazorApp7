@@ -1,0 +1,19 @@
+@page "/change"
+
+<table>
+    <tr>
+        <td>onchange:</td><td><input type="text" @onchange="TextChanged"/></td>
+    </tr>
+    <tr>
+        <td>oninput:</td><td><input type="text" @oninput="TextChanged"/></td>
+    </tr>
+</table>
+<br/>
+Input Text:@Message
+
+@code {
+    protected string? Message;
+    protected void TextChanged(ChangeEventArgs e) {
+        Message = e.Value?.ToString();
+    }
+}

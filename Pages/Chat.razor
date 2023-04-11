@@ -1,0 +1,270 @@
+@page "/chat"
+@using System
+@using System.Collections.Generic
+@using Microsoft.AspNetCore.SignalR.Client
+@using System.Threading.Tasks
+@implements System.IDisposable
+@using ChatFunctions
+@using blazorApp7.Data
+@using Microsoft.Extensions.Configuration
+@inject IConfiguration Config
+@inject IJSRuntime JSRuntime
+
+<h2>Chat Client(use SignalR)</h2>
+
+<table>
+    <tr>
+        <td colspan="4">グループ選択</td>
+    </tr>
+    <tr>
+        <td colspan="4">
+            <select @bind="grpid" style="width:500px" size="5" disabled="@btnState" >
+                @if (grpList != null) {
+                    foreach(GroupInfo grp in grpList) {
+                        <option value="@grp.GroupId">@grp.Name&nbsp;(<span>@grp.Note</span>)</option>
+                    }
+                }
+            </select>
+        </td>
+    </tr>
+    <tr>
+        <td colspan="4">
+            <table>
+                <tr>
+                    <td>User: </td>
+                    <td><input type="text" @bind="UserName" disabled="@btnState"  /></td>
+                    <td colspan="2"><button class="btn btn-primary" @onclick="LogOnOff" >@btnMsg</button></td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+    <tr>
+        <td>Message:</td>
+        <td colspan="2"><input type="text" id="txtMesg" @bind="Message" style="width:500px" @onkeypress="MesgKeyPressed" /></td>
+        <td><button class="btn btn-primary" @onclick="SendMesg" disabled="@(!btnState)">送信</button></td>
+    </tr>
+    <tr>
+        <td colspan="2"><button class="btn btn-primary" @onclick="GetUserList">ユーザー一覧</button></td>
+        <td colspan="2"><button class="btn btn-primary" @onclick="GetGroupStat">グループ一覧</button></td>
+    </tr>
+</table>
+<br/>
+<span style="color:red;font-weight:bold">@ErrorMessage</span>
+<br/>
+Received Messages are;<br/>
+<div style="font-weight:bold;width:640px;height:480px;overflow-y:auto;overflow-x:auto" id="msgArea">
+     @((MarkupString)rcvmsg)
+</div>
+
+<br/><br/>
+
+<br/><br/><br/>
+@((MarkupString)debugMesg)
+
+@code {
+    const string LOGON_TITLE = "ログオン";
+    const string LOGOFF_TITLE = "ログオフ";
+    private string UserName = "";
+    private string Message = "";
+    private string rcvmsg = "";
+    private string debugMesg = "";
+    private HubConnection con = null!;
+    private bool btnState = false;
+    private bool loggedOn = false;
+    private string grpid = null!;
+    private string ErrorMessage = "";
+    private string btnMsg = LOGON_TITLE;
+    const string MESG_STYLE = "<span style='color:{0};'>{1}</span>&gt; {2}<br/>";
+    const string INFO_STYLE = "<span style='font-size:small;color:gray;'>{0}</span><br/>";
+    const string USERSTATUS_STYLE = "<span style='color:{0};'>{1}</span>{2}<br/>";
+    private List<GroupInfo> grpList = null!;
+    private string HubUrl = null!;
+    
+    //
+    //  初期化処理
+    //
+    protected override async Task OnAfterRenderAsync(bool first) {
+        if (first) {
+            HubUrl = Config["HubUrl"]!;
+            debugMesg = HubUrl;
+            // HUBに接続
+            con = new HubConnectionBuilder()
+                .WithUrl(HubUrl)
+                .Build();
+            // 切断時再接続設定
+            con.Closed += async (err) => {
+                await Task.Delay(3000);
+                await con.StartAsync();
+            };
+            //
+            //  ユーザーメッセージ受信時処理の設定
+            //
+            con.On<string,string,string,string>(nameof(IChatClientFunctions.ReceiveMessage), 
+                async (user, mesg, id, color) => {
+                    debugMesg = "Receive Complete";
+                    rcvmsg += string.Format(MESG_STYLE,color,user,mesg);
+                    await InvokeAsync(StateHasChanged);
+                    await JSRuntime.InvokeVoidAsync("scrollToBottom","msgArea");
+                }
+            );
+            //
+            //  サーバーメッセージ受信時処理の設定
+            //
+            con.On<string>(nameof(IChatClientFunctions.FromServer),
+                async (mesg) => {
+                    if (loggedOn) {
+                        rcvmsg += $"{mesg}<br/>";
+                        await InvokeAsync(StateHasChanged);
+                        await JSRuntime.InvokeVoidAsync("scrollToBottom","msgArea");
+                    }
+                }
+            );
+            //
+            //  ログオンメッセージ受信時処理の設定
+            //
+            con.On<string,string,string>(nameof(IChatClientFunctions.LoggedOn),
+                async (id,user,color) => {
+                    debugMesg = $"Recv LoggedOn at {DateTime.Now.ToString("HH:mm:ss")}";
+                    if (loggedOn) {
+                        rcvmsg += string.Format(USERSTATUS_STYLE,color,user,"さんが入室しました");
+                    }
+                    await InvokeAsync(StateHasChanged);
+                    await JSRuntime.InvokeVoidAsync("scrollToBottom","msgArea");
+                }
+            );
+            //
+            //  ログオフメッセージ受信時処理の設定
+            //
+            con.On<string,string,string>(nameof(IChatClientFunctions.LoggedOff),
+                async (id,user,color) => {
+                    debugMesg = $"Recv LoggedOff at {DateTime.Now.ToString("HH:mm:ss")}";
+                    if (loggedOn) {
+                        rcvmsg += string.Format(USERSTATUS_STYLE,color,user,"さんが退室しました");
+                    }
+                    await InvokeAsync(StateHasChanged);
+                    await JSRuntime.InvokeVoidAsync("scrollToBottom","msgArea");
+                }
+            );
+            //
+            //  ユーザリスト回答受信時処理の設定
+            //
+            con.On<List<string>>(
+                nameof(IChatClientFunctions.UserListReply),
+                async (lst) => {
+                    rcvmsg += string.Format(INFO_STYLE,"繋がってる人たち");
+                    foreach(var u in lst) {
+                        rcvmsg += string.Format(INFO_STYLE,$"&nbsp;&nbsp;{u}");
+                    }
+                    await InvokeAsync(StateHasChanged);
+                    await JSRuntime.InvokeVoidAsync("scrollToBottom","msgArea");
+                }
+            );
+            /// <summary>
+            /// グループ一覧受信時処理の設定
+            /// </summary>
+            /// <param name="nameof(IChatClientFunctions.GroupListReply)"></param>
+            /// <param name="(lst"></param>
+            /// <returns></returns>
+            con.On<List<GroupInfo>>(
+                nameof(IChatClientFunctions.GroupListReply),
+                async (lst) => {
+                    grpList = lst;
+                    await InvokeAsync(StateHasChanged);
+                    await JSRuntime.InvokeVoidAsync("scrollToBottom","msgArea");
+                }
+            );
+            /// <summary>
+            /// グループ接続人数受信時処理の設定
+            /// </summary>
+            /// <param name="nameof(IChatClientFunctions.GroupStatReply)"></param>
+            /// <param name="(lst"></param>
+            /// <returns></returns>
+            con.On<List<GroupUserInfo>>(
+                nameof(IChatClientFunctions.GroupStatReply),
+                async (lst) => {
+                    rcvmsg += string.Format(INFO_STYLE,"グループ情報");
+                    foreach(var g in lst) {
+                        rcvmsg += string.Format(INFO_STYLE,$"&nbsp;&nbsp;{g.Name} : {g.Count}人");
+                    }
+                    this.StateHasChanged();
+                    await JSRuntime.InvokeVoidAsync("scrollToBottom","msgArea");
+                }
+            );
+
+            debugMesg = "Connecting...";
+            this.StateHasChanged();
+            await con.StartAsync();
+            await con.SendAsync(nameof(IChatHubFunctions.GroupListRequest));
+            debugMesg = "Connection Completed";
+        }
+    }
+    //
+    // 送信ボタンクリック時処理
+    //
+    private async Task SendMesg() {
+        ErrorMessage = "";
+        await con.InvokeAsync(nameof(IChatHubFunctions.SendMessage),UserName,Message);
+        debugMesg = "Send Completed";
+    }
+    //
+    // ログオン・ログオフボタンクリック時処理
+    //
+    private async Task LogOnOff() {
+        ErrorMessage = "";
+        if (!btnState) {    // ログオフ中
+            if (grpid == null) {
+                ErrorMessage = "グループが選択されていません";
+                return;
+            }
+            await con.InvokeAsync(nameof(IChatHubFunctions.LogOn),UserName,grpid);
+            btnMsg = LOGOFF_TITLE;
+            btnState = true;
+            loggedOn = true;
+        } else {    // ログイン中
+            loggedOn = false;
+            await con.InvokeAsync(nameof(IChatHubFunctions.LogOff),UserName,grpid);
+            btnMsg = LOGON_TITLE;
+            btnState = false;
+            grpid = null!;
+        }
+    }
+    //
+    //  ユーザーリスト取得ボタンクリック時処理
+    //
+    private async Task GetUserList() {
+        ErrorMessage = "";
+        if (grpid == null) {
+            ErrorMessage = "グループが指定されていません。";
+            return;
+        }
+        await con.InvokeAsync(nameof(IChatHubFunctions.UserListRequest),grpid);
+    }
+    //
+    //  グループ情報取得
+    //
+    private async Task GetGroupStat() {
+        ErrorMessage = "";
+        await con.InvokeAsync(nameof(IChatHubFunctions.GroupStatRequest));
+    }
+    //
+    //  メッセージ入力エリアでのEnterキー処理
+    //
+    private async Task MesgKeyPressed(KeyboardEventArgs e) {
+        if (e.Key == "Enter") {
+            string msg = await JSRuntime.InvokeAsync<string>("getEleValue","txtMesg");
+            await con.InvokeAsync(nameof(IChatHubFunctions.SendMessage),UserName,msg);
+            debugMesg = "Send Completed";
+        }
+    }
+
+    //
+    //  ページ破棄時に明示的にSignalRを切断してみる
+    //
+    void IDisposable.Dispose() {
+        // conはHubConnectionのインスタンス
+        // 明示的に接続を破棄
+        if (con != null) {
+            con.DisposeAsync();
+        }
+    }
+}
