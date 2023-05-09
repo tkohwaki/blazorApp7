@@ -42,14 +42,14 @@ namespace blazorApp7.Hubs {
         /// Hub Context保存用
         /// </summary>
         private static IHubContext<TestHub> _context = null!;
-        public TestHub(ILogger<TestHub> logger,IHubContext<TestHub> ctx) {
+        public TestHub(ILogger<TestHub> logger,IHubContext<TestHub> ctx, IConfiguration conf) {
             _logger = logger;
             _context = ctx;
             // グループのロード
             if (GroupInfos?.Count == 0) {
                 GroupInfos ??= new Dictionary<string, GroupInfo>();
                 using(SqlConnection con = new SqlConnection()) {
-                    string strCon = @"Data Source=lilith;Initial Catalog=ChatDb;User ID=ChatUser;Password=Chat$User#1;Encrypt=false";
+                    string strCon = conf.GetConnectionString("ChatDBConnection")!;
                     con.ConnectionString = strCon;
                     con.Open();
                     SqlCommand cmd = new SqlCommand("select * from GroupDef",con);
